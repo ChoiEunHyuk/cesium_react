@@ -15,10 +15,46 @@ npm run lint     # Run ESLint on all files
 
 This is a Vite + React 19 application using JavaScript (JSX).
 
+### Project Structure
+
+```
+src/
+├── main.jsx                    # React root setup with StrictMode
+├── App.jsx                     # Router configuration (BrowserRouter)
+├── index.css                   # Global styles
+├── components/
+│   └── Layout/
+│       ├── index.js            # Re-export
+│       ├── Layout.jsx          # Main layout with navigation
+│       └── Layout.css
+└── pages/
+    ├── Map/
+    │   ├── index.js            # Re-export
+    │   ├── MapPage.jsx         # Map page container
+    │   ├── CesiumMap.jsx       # Cesium 3D globe component
+    │   └── CesiumMap.css
+    └── Board/
+        ├── index.js            # Re-export
+        ├── BoardPage.jsx       # TODO List page
+        └── BoardPage.css
+```
+
+### Routing (react-router-dom v7)
+
+| Path | Component | Description |
+|------|-----------|-------------|
+| `/` | MapPage | Cesium 지도 페이지 (기본) |
+| `/board` | BoardPage | TODO LIST 페이지 |
+
+### Key Dependencies
+
+- **Cesium** - 3D globe/map visualization (via `vite-plugin-cesium`)
+- **react-router-dom** - Client-side routing
+
+### Configuration Files
+
 - `index.html` - Entry point, loads `/src/main.jsx`
-- `src/main.jsx` - React root setup with StrictMode
-- `src/App.jsx` - Main application component
-- `vite.config.js` - Vite configuration with @vitejs/plugin-react
+- `vite.config.js` - Vite configuration with @vitejs/plugin-react and vite-plugin-cesium
 - `eslint.config.js` - ESLint flat config with react-hooks and react-refresh plugins
 
 ## ESLint Configuration
