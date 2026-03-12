@@ -562,3 +562,183 @@
   color: rgba(255, 255, 255, 0.8);
   font-size: 13px;
 }
+
+/* ========================================================================
+ * 탄소 흡수 지도 팝업 스타일
+ * ======================================================================== */
+.carbon-popup {
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+.carbon-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.carbon-section h5 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.carbon-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+}
+
+/* 탄소 버튼 */
+.carbon-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.carbon-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, opacity 0.2s;
+}
+
+.carbon-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.carbon-btn.primary {
+  background: #4CAF50;
+  color: white;
+}
+
+.carbon-btn.primary:hover:not(:disabled) {
+  background: #45a049;
+}
+
+.carbon-btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.carbon-btn.secondary:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* 로딩 스타일 */
+.carbon-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.carbon-loading span {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  border-top-color: #4CAF50;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 정보 표시 */
+.carbon-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.info-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.info-value {
+  color: #4CAF50;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 피처 정보 */
+.feature-info {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.feature-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.feature-info-row.highlight {
+  margin-top: 4px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.feature-label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+}
+
+.feature-value {
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.feature-info-row.highlight .feature-value {
+  color: #4CAF50;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feature-info-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 4px 0;
+}
+
+.carbon-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* 탄소 범례 */
+.carbon-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
