@@ -1,11 +1,33 @@
-import * as Cesium from 'cesium'
-import type { SelectedFeature } from '../hooks/useCarbonAbsorption'
+import { useState, useEffect, ChangeEvent } from 'react'
+import type { CarbonColorRange } from '../hooks/useCarbonAbsorption'
 
-interface CarbonColorRange {
-  min: number
-  max: number
-  color: Cesium.Color
-  label: string
+type ItemType = 'forest' | 'grid'
+type DetailType = '1KM' | '500M' | '100M'
+
+interface SggOption {
+  admSectC: string
+  sggNm: string
+}
+
+interface BjdOption {
+  bjdCd: string
+  bjdNm: string
+}
+
+interface CarbonAbsorptionForm {
+  sigungu: string
+  bjdong: string
+  itemType: ItemType | ''
+  detail: DetailType | ''
+  year: string
+}
+
+const INITIAL_FORM: CarbonAbsorptionForm = {
+  sigungu: '',
+  bjdong: '',
+  itemType: '',
+  detail: '',
+  year: '',
 }
 
 interface CarbonAbsorptionPopupProps {
@@ -13,10 +35,8 @@ interface CarbonAbsorptionPopupProps {
   onClose: () => void
   isLoading: boolean
   isLoaded: boolean
-  featureCount: number
-  selectedFeature: SelectedFeature | null
   carbonColors: CarbonColorRange[]
-  onLoadData: () => void
+  onSearch: (bjdCd: string, year: string, itemType: ItemType, detail: string) => void
   onClearData: () => void
 }
 
@@ -25,122 +45,190 @@ function CarbonAbsorptionPopup({
   onClose,
   isLoading,
   isLoaded,
-  featureCount,
-  selectedFeature,
   carbonColors,
-  onLoadData,
+  onSearch,
   onClearData,
 }: CarbonAbsorptionPopupProps) {
+  const [form, setForm] = useState<CarbonAbsorptionForm>(INITIAL_FORM)
+  const [sggList, setSggList] = useState<SggOption[]>([])
+  const [sggLoading, setSggLoading] = useState(false)
+  const [bjdList, setBjdList] = useState<BjdOption[]>([])
+  const [bjdLoading, setBjdLoading] = useState(false)
+
+  useEffect(() => {
+    if (!isOpen) return
+    setSggLoading(true)
+    fetch('/crbEmss/getSgg.do')
+      .then(res => res.json())
+      .then((data: SggOption[]) => setSggList(data))
+      .catch(() => setSggList([]))
+      .finally(() => setSggLoading(false))
+  }, [isOpen])
+
+  useEffect(() => {
+    if (!form.sigungu) {
+      setBjdList([])
+      return
+    }
+    setBjdLoading(true)
+    fetch(`/crbEmss/getBjd.do?sggCode=${form.sigungu}`)
+      .then(res => res.json())
+      .then((data: BjdOption[]) => setBjdList(data))
+      .catch(() => setBjdList([]))
+      .finally(() => setBjdLoading(false))
+  }, [form.sigungu])
+
   if (!isOpen) return null
 
+  const handleChange = (e: ChangeEvent<HTMLSelectElement>) => {
+    const { name, value } = e.target
+    setForm(prev => ({
+      ...prev,
+      ...(name === 'itemType' && value !== 'grid' ? { detail: '' } : {}),
+      ...(name === 'sigungu' ? { bjdong: '', year: '' } : {}),
+      ...(name === 'bjdong' ? { year: '' } : {}),
+      [name]: value,
+    }))
+  }
+
+  const canSearch =
+    form.sigungu &&
+    form.bjdong &&
+    form.itemType &&
+    (form.itemType === 'grid' ? !!form.detail : true) &&
+    form.year &&
+    !isLoading
+
+  const handleSearch = () => {
+    if (!canSearch) return
+    onSearch(form.bjdong, form.year, form.itemType as ItemType, form.detail)
+  }
+
+  const handleReset = () => {
+    setForm(INITIAL_FORM)
+    onClearData()
+  }
+
   return (
-    <div className="control-popup carbon-popup">
+    <div className="control-popup carbon-popup building-emission-popup">
       <div className="control-popup-header">
-        <h4>산림지역 탄소 흡수 지도</h4>
-        <button className="popup-close-btn" onClick={onClose}>
-          ×
-        </button>
+        <h4>탄소 흡수</h4>
+        <button className="popup-close-btn" onClick={onClose}>×</button>
       </div>
+
       <div className="control-popup-body">
-        {/* 조회 버튼 섹션 */}
-        <div className="carbon-section">
-          <h5>데이터 조회</h5>
-          <div className="carbon-actions">
-            {!isLoaded ? (
-              <button
-                className="carbon-btn primary"
-                onClick={onLoadData}
-                disabled={isLoading}
-              >
-                {isLoading ? '로딩 중...' : '조회'}
-              </button>
-            ) : (
-              <button
-                className="carbon-btn secondary"
-                onClick={onClearData}
-              >
-                데이터 초기화
-              </button>
-            )}
-          </div>
-          {isLoading && (
-            <div className="carbon-loading">
-              <div className="loading-spinner"></div>
-              <span>데이터를 불러오는 중...</span>
-            </div>
-          )}
-          {isLoaded && (
-            <div className="carbon-info">
-              <span className="info-label">총 피처 수</span>
-              <span className="info-value">{featureCount.toLocaleString()}개</span>
-            </div>
-          )}
+        {/* 시군구 */}
+        <div className="be-field">
+          <label htmlFor="ca-sigungu">시군구</label>
+          <select
+            id="ca-sigungu"
+            name="sigungu"
+            value={form.sigungu}
+            onChange={handleChange}
+            disabled={sggLoading}
+          >
+            <option value="">{sggLoading ? '불러오는 중...' : '선택'}</option>
+            {sggList.map(sgg => (
+              <option key={sgg.admSectC} value={sgg.admSectC}>
+                {sgg.sggNm}
+              </option>
+            ))}
+          </select>
         </div>
 
-        {/* 선택된 피처 정보 */}
-        {isLoaded && selectedFeature && (
-          <>
-            <div className="carbon-divider"></div>
-            <div className="carbon-section">
-              <h5>선택 영역 정보</h5>
-              <div className="feature-info">
-                <div className="feature-info-row">
-                  <span className="feature-label">수종</span>
-                  <span className="feature-value">{selectedFeature.speciesName}</span>
-                </div>
-                <div className="feature-info-row">
-                  <span className="feature-label">림종</span>
-                  <span className="feature-value">{selectedFeature.forestType}</span>
-                </div>
-                <div className="feature-info-row">
-                  <span className="feature-label">영급</span>
-                  <span className="feature-value">{selectedFeature.ageClass}</span>
-                </div>
-                <div className="feature-info-row">
-                  <span className="feature-label">밀도</span>
-                  <span className="feature-value">{selectedFeature.densityName} ({selectedFeature.densityFactor}%)</span>
-                </div>
-                <div className="feature-info-row">
-                  <span className="feature-label">면적</span>
-                  <span className="feature-value">{selectedFeature.area} ha</span>
-                </div>
-                <div className="feature-info-row highlight">
-                  <span className="feature-label">총 탄소 흡수량</span>
-                  <span className="feature-value">{selectedFeature.totalAbsorption} tCO2/년</span>
-                </div>
-              </div>
-            </div>
-          </>
+        {/* 법정동 */}
+        <div className="be-field">
+          <label htmlFor="ca-bjdong">법정동</label>
+          <select
+            id="ca-bjdong"
+            name="bjdong"
+            value={form.bjdong}
+            onChange={handleChange}
+            disabled={!form.sigungu || bjdLoading}
+          >
+            <option value="">{bjdLoading ? '불러오는 중...' : '선택'}</option>
+            {bjdList.map(bjd => (
+              <option key={bjd.bjdCd} value={bjd.bjdCd}>
+                {bjd.bjdNm}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 항목 */}
+        <div className="be-field">
+          <label htmlFor="ca-itemType">항목</label>
+          <select
+            id="ca-itemType"
+            name="itemType"
+            value={form.itemType}
+            onChange={handleChange}
+          >
+            <option value="">선택</option>
+            <option value="forest">산림</option>
+            <option value="rstree">가로수</option>
+            <option value="grid">격자</option>
+          </select>
+        </div>
+
+        {/* 상세 - 격자 선택 시에만 노출 */}
+        {form.itemType === 'grid' && (
+          <div className="be-field">
+            <label htmlFor="ca-detail">상세</label>
+            <select
+              id="ca-detail"
+              name="detail"
+              value={form.detail}
+              onChange={handleChange}
+            >
+              <option value="">선택</option>
+              <option value="1KM">1KM</option>
+              <option value="500M">500M</option>
+              <option value="100M">100M</option>
+            </select>
+          </div>
         )}
 
-        {isLoaded && !selectedFeature && (
-          <>
-            <div className="carbon-divider"></div>
-            <div className="carbon-section">
-              <p className="carbon-hint">지도에서 영역을 클릭하면 상세 정보를 볼 수 있습니다.</p>
-            </div>
-          </>
-        )}
+        {/* 연도 */}
+        <div className="be-field">
+          <label htmlFor="ca-year">연도</label>
+          <select
+            id="ca-year"
+            name="year"
+            value={form.year}
+            onChange={handleChange}
+            disabled={!form.bjdong}
+          >
+            <option value="">선택</option>
+            <option value="2024">2024년</option>
+          </select>
+        </div>
+
+        {/* 액션 버튼 */}
+        <div className="be-actions">
+          <button className="be-btn secondary" onClick={handleReset} disabled={isLoading}>
+            초기화
+          </button>
+          <button className="be-btn primary" onClick={handleSearch} disabled={!canSearch}>
+            {isLoading ? '조회 중...' : '조회'}
+          </button>
+        </div>
 
         {/* 범례 */}
         {isLoaded && (
-          <>
-            <div className="carbon-divider"></div>
-            <div className="carbon-section">
-              <h5>탄소 흡수량 범례</h5>
-              <div className="carbon-legend">
-                {carbonColors.map((item, index) => (
-                  <div key={index} className="legend-item">
-                    <span
-                      className="legend-color"
-                      style={{ backgroundColor: item.color.toCssColorString() }}
-                    ></span>
-                    <span className="legend-label">{item.label}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="be-legend">
+            <p className="be-legend-title">탄소 흡수량 (tCO2/년)</p>
+            <div className="be-legend-item">
+              <span className="be-legend-color" style={{ background: '#808080' }} />
+              <span className="be-legend-label">데이터 없음</span>
             </div>
-          </>
+            {carbonColors.map(item => (
+              <div key={item.label} className="be-legend-item">
+                <span className="be-legend-color" style={{ background: item.color }} />
+                <span className="be-legend-label">{item.label}</span>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </div>

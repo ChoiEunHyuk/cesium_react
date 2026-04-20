@@ -1,214 +1,424 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import * as Cesium from 'cesium'
 
-// 밀도 보정계수
-const densityFactors: Record<string, number> = {
-  'A': 0.4,  // 소 (50% 이하)
-  'B': 0.6,  // 중 (51~70%)
-  'C': 1.0,  // 밀 (71% 이상)
-}
-
-// 탄소 흡수량에 따른 색상 범위 (총 흡수량 tCO2/년 기준)
-interface CarbonColorRange {
+export interface CarbonColorRange {
   min: number
   max: number
-  color: Cesium.Color
+  color: string
   label: string
 }
 
-const carbonColors: CarbonColorRange[] = [
-  { min: 0, max: 5, color: Cesium.Color.fromCssColorString('#fee5d9'), label: '0 - 5 tCO2/년' },
-  { min: 5, max: 15, color: Cesium.Color.fromCssColorString('#fcae91'), label: '5 - 15 tCO2/년' },
-  { min: 15, max: 30, color: Cesium.Color.fromCssColorString('#fb6a4a'), label: '15 - 30 tCO2/년' },
-  { min: 30, max: 50, color: Cesium.Color.fromCssColorString('#de2d26'), label: '30 - 50 tCO2/년' },
-  { min: 50, max: Infinity, color: Cesium.Color.fromCssColorString('#a50f15'), label: '50+ tCO2/년' },
+export const forestAbsorptionColors: CarbonColorRange[] = [
+  { min: 0,  max: 5,        color: '#edf8e9', label: '0 ~ 5 tCO2/년' },
+  { min: 5,  max: 15,       color: '#bae4b3', label: '5 ~ 15 tCO2/년' },
+  { min: 15, max: 30,       color: '#74c476', label: '15 ~ 30 tCO2/년' },
+  { min: 30, max: 50,       color: '#31a354', label: '30 ~ 50 tCO2/년' },
+  { min: 50, max: Infinity, color: '#006d2c', label: '50+ tCO2/년' },
 ]
 
-// 탄소 흡수량에 따른 색상 반환
-function getColorByAbsorption(absorption: number): Cesium.Color {
-  for (const item of carbonColors) {
-    if (absorption >= item.min && absorption < item.max) {
-      return item.color.withAlpha(0.7)
-    }
-  }
-  return Cesium.Color.GRAY.withAlpha(0.5)
+export const grid1kmAbsorptionColors: CarbonColorRange[] = [
+  { min: 0,   max: 50,       color: '#edf8e9', label: '0 ~ 50 tCO2/년' },
+  { min: 50,  max: 150,      color: '#bae4b3', label: '50 ~ 150 tCO2/년' },
+  { min: 150, max: 300,      color: '#74c476', label: '150 ~ 300 tCO2/년' },
+  { min: 300, max: 500,      color: '#31a354', label: '300 ~ 500 tCO2/년' },
+  { min: 500, max: Infinity, color: '#006d2c', label: '500+ tCO2/년' },
+]
+
+export const grid500mAbsorptionColors: CarbonColorRange[] = [
+  { min: 0,   max: 10,       color: '#edf8e9', label: '0 ~ 10 tCO2/년' },
+  { min: 10,  max: 50,       color: '#bae4b3', label: '10 ~ 50 tCO2/년' },
+  { min: 50,  max: 100,      color: '#74c476', label: '50 ~ 100 tCO2/년' },
+  { min: 100, max: 200,      color: '#31a354', label: '100 ~ 200 tCO2/년' },
+  { min: 200, max: Infinity, color: '#006d2c', label: '200+ tCO2/년' },
+]
+
+export const grid100mAbsorptionColors: CarbonColorRange[] = [
+  { min: 0,  max: 1,        color: '#edf8e9', label: '0 ~ 1 tCO2/년' },
+  { min: 1,  max: 5,        color: '#bae4b3', label: '1 ~ 5 tCO2/년' },
+  { min: 5,  max: 15,       color: '#74c476', label: '5 ~ 15 tCO2/년' },
+  { min: 15, max: 30,       color: '#31a354', label: '15 ~ 30 tCO2/년' },
+  { min: 30, max: Infinity, color: '#006d2c', label: '30+ tCO2/년' },
+]
+
+// 하위 호환을 위한 alias (CarbonAbsorptionPopup 등에서 사용 중)
+export const carbonColors = forestAbsorptionColors
+
+const GRID_ABSORPTION_COLORS: Record<string, CarbonColorRange[]> = {
+  '1KM':  grid1kmAbsorptionColors,
+  '500M': grid500mAbsorptionColors,
+  '100M': grid100mAbsorptionColors,
 }
 
+const GEOSERVER_WMS  = '/geoserver/goyang/wms'
+const FOREST_LAYER   = 'goyang:crb_absorption'
+const FOREST_STYLE   = 'carbon_absorption_style'
+
+const GRID_LAYERS: Record<string, string> = {
+  '1KM':  'goyang:grid_absorption_1km',
+  '500M': 'goyang:grid_absorption_500m',
+  '100M': 'goyang:grid_absorption_100m',
+}
+const GRID_STYLES: Record<string, string> = {
+  '1KM':  'grid_absorption_1km_style',
+  '500M': 'grid_absorption_500m_style',
+  '100M': 'grid_absorption_100m_style',
+}
+
+const HIGHLIGHT_FILL    = Cesium.Color.fromCssColorString('#FFD700').withAlpha(0.25)
+const HIGHLIGHT_OUTLINE = Cesium.Color.fromCssColorString('#FFD700')
+
+type GeoJsonGeometry =
+  | { type: 'Polygon';      coordinates: number[][][] }
+  | { type: 'MultiPolygon'; coordinates: number[][][][] }
+
+function applyHighlight(viewer: Cesium.Viewer, ds: Cesium.GeoJsonDataSource) {
+  for (const entity of ds.entities.values) {
+    if (!entity.polygon) continue
+    entity.polygon.material     = new Cesium.ColorMaterialProperty(HIGHLIGHT_FILL)
+    entity.polygon.outline      = new Cesium.ConstantProperty(true)
+    entity.polygon.outlineColor = new Cesium.ConstantProperty(HIGHLIGHT_OUTLINE)
+    entity.polygon.outlineWidth = new Cesium.ConstantProperty(3)
+  }
+  viewer.dataSources.add(ds)
+}
+
+export interface ForestDetail {
+  gid: string | null
+  koftrNm: string | null
+  frtpNm: string | null
+  agclsCd: string | null
+  dnstCd: string | null
+  areaHa: number | null
+  totalAbsorption: number | null
+}
+
+export interface SelectedForest {
+  data: ForestDetail
+  screenX: number
+  screenY: number
+}
+
+export interface GridAbsorptionDetail {
+  gid: string | null
+  forestCount: number | null
+  totalAbsorption: number | null
+}
+
+export interface SelectedGridAbsorption {
+  data: GridAbsorptionDetail
+  screenX: number
+  screenY: number
+}
+
+type ItemType = 'forest' | 'grid'
 type CesiumViewerRef = React.MutableRefObject<Cesium.Viewer | null>
-
-interface CarbonData {
-  [speciesCode: string]: {
-    absorption: Record<string, number>
-  }
-}
-
-export interface SelectedFeature {
-  speciesName: string
-  forestType: string
-  ageClass: string
-  densityName: string
-  densityFactor: string
-  area: string
-  totalAbsorption: string
-}
 
 export interface UseCarbonAbsorptionReturn {
   isLoading: boolean
   isLoaded: boolean
-  featureCount: number
-  selectedFeature: SelectedFeature | null
+  activeItemType: ItemType | null
+  activeDetail: string
   carbonColors: CarbonColorRange[]
-  loadCarbonData: () => Promise<void>
-  clearCarbonData: () => void
+  selectedForest: SelectedForest | null
+  isDetailLoading: boolean
+  selectedGridAbsorption: SelectedGridAbsorption | null
+  isGridDetailLoading: boolean
+  search: (bjdCd: string, year: string, itemType: ItemType, detail: string) => Promise<void>
+  clearData: () => void
+  clearSelected: () => void
+  clearSelectedGridAbsorption: () => void
   cleanup: () => void
 }
 
 export function useCarbonAbsorption(viewerRef: CesiumViewerRef): UseCarbonAbsorptionReturn {
-  const [isLoading, setIsLoading] = useState(false)
-  const [isLoaded, setIsLoaded] = useState(false)
-  const [featureCount, setFeatureCount] = useState(0)
-  const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null)
+  const [isLoading, setIsLoading]           = useState(false)
+  const [isLoaded, setIsLoaded]             = useState(false)
+  const [activeItemType, setActiveItemType] = useState<ItemType | null>(null)
+  const [activeDetail, setActiveDetail]     = useState<string>('')
+  const [selectedForest, setSelectedForest] = useState<SelectedForest | null>(null)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [selectedGridAbsorption, setSelectedGridAbsorption] = useState<SelectedGridAbsorption | null>(null)
+  const [isGridDetailLoading, setIsGridDetailLoading] = useState(false)
 
-  const dataSourceRef = useRef<Cesium.GeoJsonDataSource | null>(null)
-  const carbonDataRef = useRef<CarbonData | null>(null)
+  const wmsLayerRef     = useRef<Cesium.ImageryLayer | null>(null)
   const clickHandlerRef = useRef<Cesium.ScreenSpaceEventHandler | null>(null)
+  const highlightDsRef  = useRef<Cesium.GeoJsonDataSource | null>(null)
+  const currentBjdCdRef = useRef<string>('')
 
-  // 탄소 흡수 데이터 로드
-  const loadCarbonData = useCallback(async () => {
+  const clearHighlight = useCallback(() => {
+    if (viewerRef.current && highlightDsRef.current) {
+      viewerRef.current.dataSources.remove(highlightDsRef.current, true)
+      highlightDsRef.current = null
+    }
+  }, [viewerRef])
+
+  const search = useCallback(async (bjdCd: string, _year: string, itemType: ItemType, detail: string) => {
     if (!viewerRef.current || isLoading) return
-
     setIsLoading(true)
 
-    try {
-      // 탄소 흡수량 데이터 로드
-      const absorptionResponse = await fetch('/carbon/tree_species_carbon_absorption.json')
-      carbonDataRef.current = await absorptionResponse.json() as CarbonData
-
-      // WGS84 변환된 GeoJSON 사용
-      const dataSource = await Cesium.GeoJsonDataSource.load('/carbon/forest_map_wgs84.geojson', {
-        clampToGround: true,
-      })
-
-      const entities = dataSource.entities.values
-      setFeatureCount(entities.length)
-
-      // 각 엔티티에 탄소 흡수량 기반 색상 적용
-      for (const entity of entities) {
-        const props = entity.properties
-        const speciesCode = props?.KOFTR_GROU?.getValue() as string | undefined
-        const ageClass = props?.AGCLS_CD?.getValue() as string | undefined
-        const densityCode = props?.DNST_CD?.getValue() as string | undefined
-        const area = (props?.AREA_HA?.getValue() as number | undefined) || 0
-
-        // 1. 기준 흡수율 조회 (tCO2/ha/년)
-        let baseRate = 0
-        if (carbonDataRef.current && speciesCode && carbonDataRef.current[speciesCode] && ageClass) {
-          const ageKey = String(parseInt(ageClass) * 10)
-          baseRate = carbonDataRef.current[speciesCode]?.absorption[ageKey] || 0
-        }
-
-        // 2. 밀도 보정계수 적용
-        const densityFactor = (densityCode && densityFactors[densityCode]) || 0.6
-        const adjustedRate = baseRate * densityFactor
-
-        // 3. 면적 적용하여 총 흡수량 계산 (tCO2/년)
-        const totalAbsorption = adjustedRate * area
-
-        // 색상 적용
-        const color = getColorByAbsorption(totalAbsorption)
-
-        if (entity.polygon) {
-          entity.polygon.material = new Cesium.ColorMaterialProperty(color)
-          entity.polygon.outline = new Cesium.ConstantProperty(true)
-          entity.polygon.outlineColor = new Cesium.ConstantProperty(Cesium.Color.BLACK.withAlpha(0.3))
-        }
-
-        // 밀도 한글 변환
-        const densityName = densityCode === 'A' ? '소' : densityCode === 'B' ? '중' : densityCode === 'C' ? '밀' : '알 수 없음'
-
-        // 계산된 값 저장
-        props?.addProperty('_speciesName', (props?.KOFTR_NM?.getValue() as string | undefined) || '알 수 없음')
-        props?.addProperty('_forestType', (props?.FRTP_NM?.getValue() as string | undefined) || '알 수 없음')
-        props?.addProperty('_ageClass', ageClass ? `${parseInt(ageClass)}영급 (${parseInt(ageClass) * 10}년생)` : '알 수 없음')
-        props?.addProperty('_densityName', densityName)
-        props?.addProperty('_densityFactor', (densityFactor * 100).toFixed(0))
-        props?.addProperty('_area', area.toFixed(3))
-        props?.addProperty('_totalAbsorption', totalAbsorption.toFixed(2))
-      }
-
-      // 기존 데이터 제거
-      if (dataSourceRef.current) {
-        viewerRef.current.dataSources.remove(dataSourceRef.current)
-      }
-
-      viewerRef.current.dataSources.add(dataSource)
-      dataSourceRef.current = dataSource
-
-      // 클릭 핸들러 등록
-      if (!clickHandlerRef.current) {
-        clickHandlerRef.current = new Cesium.ScreenSpaceEventHandler(viewerRef.current.scene.canvas)
-        clickHandlerRef.current.setInputAction((click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
-          const pickedObject = viewerRef.current?.scene.pick(click.position)
-          if (Cesium.defined(pickedObject) && pickedObject.id && pickedObject.id.properties) {
-            const props = pickedObject.id.properties
-            setSelectedFeature({
-              speciesName: (props._speciesName?.getValue() as string | undefined) || '알 수 없음',
-              forestType: (props._forestType?.getValue() as string | undefined) || '알 수 없음',
-              ageClass: (props._ageClass?.getValue() as string | undefined) || '알 수 없음',
-              densityName: (props._densityName?.getValue() as string | undefined) || '알 수 없음',
-              densityFactor: (props._densityFactor?.getValue() as string | undefined) || '0',
-              area: (props._area?.getValue() as string | undefined) || '0',
-              totalAbsorption: (props._totalAbsorption?.getValue() as string | undefined) || '0',
-            })
-          } else {
-            setSelectedFeature(null)
-          }
-        }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
-      }
-
-      // 데이터 영역으로 카메라 이동
-      viewerRef.current.flyTo(dataSource, {
-        duration: 2,
-      })
-
-      setIsLoaded(true)
-    } catch (error) {
-      console.error('탄소 흡수 데이터 로드 실패:', error)
-    } finally {
-      setIsLoading(false)
+    if (wmsLayerRef.current) {
+      viewerRef.current.imageryLayers.remove(wmsLayerRef.current, true)
+      wmsLayerRef.current = null
     }
-  }, [viewerRef, isLoading])
-
-  // 데이터 제거
-  const clearCarbonData = useCallback(() => {
-    if (viewerRef.current && dataSourceRef.current) {
-      viewerRef.current.dataSources.remove(dataSourceRef.current)
-      dataSourceRef.current = null
-    }
-
     if (clickHandlerRef.current) {
       clickHandlerRef.current.destroy()
       clickHandlerRef.current = null
     }
+    clearHighlight()
+    setSelectedForest(null)
+    setSelectedGridAbsorption(null)
+    setActiveItemType(itemType)
+    setActiveDetail(detail)
+    currentBjdCdRef.current = bjdCd
 
+    const layerName = itemType === 'grid'
+      ? (GRID_LAYERS[detail] ?? 'goyang:grid_absorption_1km')
+      : FOREST_LAYER
+    const styleName = itemType === 'grid'
+      ? (GRID_STYLES[detail] ?? 'grid_absorption_1km_style')
+      : FOREST_STYLE
+
+    try {
+      const provider = new Cesium.WebMapServiceImageryProvider({
+        url: GEOSERVER_WMS,
+        layers: layerName,
+        parameters: {
+          format: 'image/png',
+          transparent: true,
+          styles: styleName,
+          viewparams: `bjdCd:${bjdCd}`,
+        },
+      })
+
+      const layer = viewerRef.current.imageryLayers.addImageryProvider(provider)
+      layer.alpha = 0.85
+      wmsLayerRef.current = layer
+      setIsLoaded(true)
+
+      if (itemType === 'grid') {
+        const handler = new Cesium.ScreenSpaceEventHandler(viewerRef.current.scene.canvas)
+        handler.setInputAction(async (click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+          if (!viewerRef.current || !wmsLayerRef.current) return
+
+          const viewer   = viewerRef.current
+          const position = click.position
+
+          const ray = viewer.camera.getPickRay(position)
+          if (!ray) return
+          const cartesian = viewer.scene.globe.pick(ray, viewer.scene)
+            ?? viewer.camera.pickEllipsoid(position)
+          if (!cartesian) return
+
+          const carto = Cesium.Cartographic.fromCartesian(cartesian)
+          const lon   = Cesium.Math.toDegrees(carto.longitude)
+          const lat   = Cesium.Math.toDegrees(carto.latitude)
+
+          setIsGridDetailLoading(true)
+          setSelectedGridAbsorption(null)
+
+          try {
+            const delta  = 0.001
+            const params = new URLSearchParams({
+              SERVICE:       'WMS',
+              VERSION:       '1.1.1',
+              REQUEST:       'GetFeatureInfo',
+              LAYERS:        layerName,
+              QUERY_LAYERS:  layerName,
+              STYLES:        styleName,
+              viewparams:    `bjdCd:${currentBjdCdRef.current}`,
+              INFO_FORMAT:   'application/json',
+              FEATURE_COUNT: '1',
+              X:             '50',
+              Y:             '50',
+              WIDTH:         '101',
+              HEIGHT:        '101',
+              BBOX:          `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`,
+              SRS:           'EPSG:4326',
+            })
+
+            const res  = await fetch(`${GEOSERVER_WMS}?${params.toString()}`)
+            const body = await res.text()
+            if (!res.ok || !body || body.trimStart().startsWith('<')) return
+
+            const json  = JSON.parse(body) as { features?: { properties: Record<string, unknown> }[] }
+            const props = json.features?.[0]?.properties
+            if (!props) return
+
+            setSelectedGridAbsorption({
+              data: {
+                gid:             props['gid']              != null ? String(props['gid'])              : null,
+                forestCount:     props['forest_count']     != null ? Number(props['forest_count'])     : null,
+                totalAbsorption: props['total_absorption'] != null ? Number(props['total_absorption']) : null,
+              },
+              screenX: position.x,
+              screenY: position.y,
+            })
+          } catch {
+            // 실패 시 무시
+          } finally {
+            setIsGridDetailLoading(false)
+          }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+        clickHandlerRef.current = handler
+      }
+
+      if (itemType === 'forest') {
+        const handler = new Cesium.ScreenSpaceEventHandler(viewerRef.current.scene.canvas)
+        handler.setInputAction(async (click: Cesium.ScreenSpaceEventHandler.PositionedEvent) => {
+          if (!viewerRef.current || !wmsLayerRef.current) return
+
+          const viewer   = viewerRef.current
+          const position = click.position
+
+          const ray = viewer.camera.getPickRay(position)
+          if (!ray) return
+          const cartesian = viewer.scene.globe.pick(ray, viewer.scene)
+            ?? viewer.camera.pickEllipsoid(position)
+          if (!cartesian) return
+
+          const carto = Cesium.Cartographic.fromCartesian(cartesian)
+          const lon   = Cesium.Math.toDegrees(carto.longitude)
+          const lat   = Cesium.Math.toDegrees(carto.latitude)
+
+          setIsDetailLoading(true)
+          setSelectedForest(null)
+          clearHighlight()
+
+          try {
+            const delta  = 0.0005
+            const params = new URLSearchParams({
+              SERVICE:       'WMS',
+              VERSION:       '1.1.1',
+              REQUEST:       'GetFeatureInfo',
+              LAYERS:        FOREST_LAYER,
+              QUERY_LAYERS:  FOREST_LAYER,
+              STYLES:        FOREST_STYLE,
+              viewparams:    `bjdCd:${currentBjdCdRef.current}`,
+              INFO_FORMAT:   'application/json',
+              FEATURE_COUNT: '1',
+              X:             '50',
+              Y:             '50',
+              WIDTH:         '101',
+              HEIGHT:        '101',
+              BBOX:          `${lon - delta},${lat - delta},${lon + delta},${lat + delta}`,
+              SRS:           'EPSG:4326',
+            })
+
+            const res  = await fetch(`${GEOSERVER_WMS}?${params.toString()}`)
+            const body = await res.text()
+            if (!res.ok || !body || body.trimStart().startsWith('<')) return
+
+            const json  = JSON.parse(body) as { features?: { properties: Record<string, unknown> }[] }
+            const props = json.features?.[0]?.properties
+            if (!props) return
+
+            const gid = props['gid'] != null ? String(props['gid']) : null
+            if (!gid) return
+
+            setSelectedForest({
+              data: {
+                gid,
+                koftrNm:         props['koftr_nm']         != null ? String(props['koftr_nm'])         : null,
+                frtpNm:          props['frtp_nm']          != null ? String(props['frtp_nm'])          : null,
+                agclsCd:         props['agcls_cd']         != null ? String(props['agcls_cd'])         : null,
+                dnstCd:          props['dnst_cd']          != null ? String(props['dnst_cd'])          : null,
+                areaHa:          props['area_ha']          != null ? Number(props['area_ha'])          : null,
+                totalAbsorption: props['total_absorption'] != null ? Number(props['total_absorption']) : null,
+              },
+              screenX: position.x,
+              screenY: position.y,
+            })
+
+            const geomRes = await fetch(
+              `/crbAbsorption/getForestGeom.do?gid=${encodeURIComponent(gid)}`,
+              { cache: 'no-store' },
+            )
+            if (!geomRes.ok) return
+
+            const { geom } = await geomRes.json() as { geom: string }
+            if (!geom) return
+
+            const geometry = JSON.parse(geom) as GeoJsonGeometry
+            const geojson  = { type: 'Feature', geometry, properties: {} }
+            const ds       = await Cesium.GeoJsonDataSource.load(geojson, { clampToGround: true })
+            if (!viewerRef.current) return
+            applyHighlight(viewerRef.current, ds)
+            highlightDsRef.current = ds
+
+          } catch {
+            // 실패 시 무시
+          } finally {
+            setIsDetailLoading(false)
+          }
+        }, Cesium.ScreenSpaceEventType.LEFT_CLICK)
+        clickHandlerRef.current = handler
+      }
+
+    } catch {
+      // 실패 시 무시
+    } finally {
+      setIsLoading(false)
+    }
+  }, [viewerRef, isLoading, clearHighlight])
+
+  const clearData = useCallback(() => {
+    if (viewerRef.current && wmsLayerRef.current) {
+      viewerRef.current.imageryLayers.remove(wmsLayerRef.current, true)
+      wmsLayerRef.current = null
+    }
+    if (clickHandlerRef.current) {
+      clickHandlerRef.current.destroy()
+      clickHandlerRef.current = null
+    }
+    clearHighlight()
+    currentBjdCdRef.current = ''
     setIsLoaded(false)
-    setFeatureCount(0)
-    setSelectedFeature(null)
-  }, [viewerRef])
+    setActiveItemType(null)
+    setActiveDetail('')
+    setSelectedForest(null)
+    setSelectedGridAbsorption(null)
+  }, [viewerRef, clearHighlight])
 
-  // 정리
+  const clearSelected = useCallback(() => {
+    clearHighlight()
+    setSelectedForest(null)
+  }, [clearHighlight])
+
+  const clearSelectedGridAbsorption = useCallback(() => {
+    setSelectedGridAbsorption(null)
+  }, [])
+
   const cleanup = useCallback(() => {
-    clearCarbonData()
-  }, [clearCarbonData])
+    clearData()
+  }, [clearData])
+
+  useEffect(() => {
+    return () => {
+      if (clickHandlerRef.current) {
+        clickHandlerRef.current.destroy()
+        clickHandlerRef.current = null
+      }
+    }
+  }, [])
+
+  const activeCarbonColors = activeItemType === 'grid'
+    ? (GRID_ABSORPTION_COLORS[activeDetail] ?? grid1kmAbsorptionColors)
+    : forestAbsorptionColors
 
   return {
     isLoading,
     isLoaded,
-    featureCount,
-    selectedFeature,
-    carbonColors,
-    loadCarbonData,
-    clearCarbonData,
+    activeItemType,
+    activeDetail,
+    carbonColors: activeCarbonColors,
+    selectedForest,
+    isDetailLoading,
+    selectedGridAbsorption,
+    isGridDetailLoading,
+    search,
+    clearData,
+    clearSelected,
+    clearSelectedGridAbsorption,
     cleanup,
   }
 }

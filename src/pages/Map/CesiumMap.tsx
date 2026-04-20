@@ -8,15 +8,21 @@ import MapToolbar from './MapToolbar'
 import { useImageSlide } from './hooks/useImageSlide'
 import { useSlopeAnalysis } from './hooks/useSlopeAnalysis'
 import { useCarbonAbsorption } from './hooks/useCarbonAbsorption'
+import { useBuildingEmission } from './hooks/useBuildingEmission'
 
 // Components
 import ImageSlidePopup from './components/ImageSlidePopup'
 import SlopeAnalysisPopup from './components/SlopeAnalysisPopup'
 import CarbonAbsorptionPopup from './components/CarbonAbsorptionPopup'
+import BuildingEmissionPopup from './components/BuildingEmissionPopup'
+import ParcelDetailPopup from './components/ParcelDetailPopup'
+import GridDetailPopup from './components/GridDetailPopup'
+import ForestDetailPopup from './components/ForestDetailPopup'
+import GridAbsorptionDetailPopup from './components/GridAbsorptionDetailPopup'
 
 Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiI3ODg3ZmRkMS0xMjBhLTQwNWQtYjkxNS00NGJkMzUxOWQwNGQiLCJpZCI6Mzc4OTA0LCJpYXQiOjE3Njg0NjI4MzB9.ixCIJjyhqXIALvMNMxQbBLkshlm0s2XpiyJagexiT7o'
 
-type PopupType = 'imageSlide' | 'slopeAnalysis' | 'carbonAbsorption' | null
+type PopupType = 'imageSlide' | 'slopeAnalysis' | 'carbonAbsorption' | 'buildingEmission' | null
 
 function CesiumMap() {
   const cesiumContainer = useRef<HTMLDivElement>(null)
@@ -29,6 +35,7 @@ function CesiumMap() {
   const imageSlide = useImageSlide(viewerRef)
   const slopeAnalysis = useSlopeAnalysis(viewerRef)
   const carbonAbsorption = useCarbonAbsorption(viewerRef)
+  const buildingEmission = useBuildingEmission(viewerRef)
 
   useEffect(() => {
     if (cesiumContainer.current && !viewerRef.current) {
@@ -42,6 +49,8 @@ function CesiumMap() {
         sceneModePicker: true,
         navigationHelpButton: true,
         fullscreenButton: true,
+        infoBox: false,
+        selectionIndicator: false,
       })
 
       viewerRef.current.camera.flyTo({
@@ -57,6 +66,7 @@ function CesiumMap() {
     return () => {
       imageSlide.cleanup()
       carbonAbsorption.cleanup()
+      buildingEmission.cleanup()
       if (viewerRef.current) {
         viewerRef.current.destroy()
         viewerRef.current = null
@@ -79,7 +89,11 @@ function CesiumMap() {
     }
     // 탄소 흡수 정리
     if (carbonAbsorption.isLoaded) {
-      carbonAbsorption.clearCarbonData()
+      carbonAbsorption.clearData()
+    }
+    // 건물 탄소 배출 정리
+    if (buildingEmission.isLoaded) {
+      buildingEmission.clearData()
     }
     setActivePopup(null)
   }
@@ -109,7 +123,10 @@ function CesiumMap() {
         }
       }
       if (activePopup === 'carbonAbsorption' && carbonAbsorption.isLoaded) {
-        carbonAbsorption.clearCarbonData()
+        carbonAbsorption.clearData()
+      }
+      if (activePopup === 'buildingEmission' && buildingEmission.isLoaded) {
+        buildingEmission.clearData()
       }
     }
     setActivePopup(popupName)
@@ -135,7 +152,14 @@ function CesiumMap() {
 
   const closeCarbonAbsorptionPopup = () => {
     if (carbonAbsorption.isLoaded) {
-      carbonAbsorption.clearCarbonData()
+      carbonAbsorption.clearData()
+    }
+    setActivePopup(null)
+  }
+
+  const closeBuildingEmissionPopup = () => {
+    if (buildingEmission.isLoaded) {
+      buildingEmission.clearData()
     }
     setActivePopup(null)
   }
@@ -181,7 +205,14 @@ function CesiumMap() {
             onClick={() => openPopup('carbonAbsorption')}
           >
             <span className="menu-item-icon"></span>
-            <span className="menu-item-text">산림지역 탄소 흡수 지도</span>
+            <span className="menu-item-text">탄소 흡수</span>
+          </li>
+          <li
+            className={`menu-item ${activePopup === 'buildingEmission' ? 'active' : ''}`}
+            onClick={() => openPopup('buildingEmission')}
+          >
+            <span className="menu-item-icon"></span>
+            <span className="menu-item-text">탄소 배출</span>
           </li>
         </ul>
       </div>
@@ -218,17 +249,58 @@ function CesiumMap() {
         onClearResults={slopeAnalysis.clearAnalysisResults}
       />
 
+      {/* 건물 탄소 배출 팝업 */}
+      <BuildingEmissionPopup
+        isOpen={activePopup === 'buildingEmission'}
+        onClose={closeBuildingEmissionPopup}
+        isSearching={buildingEmission.isLoading}
+        isLoaded={buildingEmission.isLoaded}
+        activeItemType={buildingEmission.activeItemType}
+        activeDetail={buildingEmission.activeDetail}
+        emissionColors={buildingEmission.emissionColors}
+        onSearch={buildingEmission.search}
+        onClear={buildingEmission.clearData}
+      />
+
+      {/* 필지 클릭 상세 팝업 */}
+      <ParcelDetailPopup
+        selectedParcel={buildingEmission.selectedParcel}
+        isDetailLoading={buildingEmission.isDetailLoading}
+        activeEnergyType={buildingEmission.activeEnergyType}
+        onClose={buildingEmission.clearSelected}
+      />
+
+      {/* 격자 클릭 상세 팝업 */}
+      <GridDetailPopup
+        selectedGrid={buildingEmission.selectedGrid}
+        isDetailLoading={buildingEmission.isGridDetailLoading}
+        activeEnergyType={buildingEmission.activeEnergyType}
+        onClose={buildingEmission.clearSelectedGrid}
+      />
+
+      {/* 산림 클릭 상세 팝업 */}
+      <ForestDetailPopup
+        selectedForest={carbonAbsorption.selectedForest}
+        isDetailLoading={carbonAbsorption.isDetailLoading}
+        onClose={carbonAbsorption.clearSelected}
+      />
+
+      {/* 탄소흡수 격자 클릭 상세 팝업 */}
+      <GridAbsorptionDetailPopup
+        selectedGridAbsorption={carbonAbsorption.selectedGridAbsorption}
+        isDetailLoading={carbonAbsorption.isGridDetailLoading}
+        onClose={carbonAbsorption.clearSelectedGridAbsorption}
+      />
+
       {/* 탄소 흡수 지도 팝업 */}
       <CarbonAbsorptionPopup
         isOpen={activePopup === 'carbonAbsorption'}
         onClose={closeCarbonAbsorptionPopup}
         isLoading={carbonAbsorption.isLoading}
         isLoaded={carbonAbsorption.isLoaded}
-        featureCount={carbonAbsorption.featureCount}
-        selectedFeature={carbonAbsorption.selectedFeature}
         carbonColors={carbonAbsorption.carbonColors}
-        onLoadData={carbonAbsorption.loadCarbonData}
-        onClearData={carbonAbsorption.clearCarbonData}
+        onSearch={carbonAbsorption.search}
+        onClearData={carbonAbsorption.clearData}
       />
     </div>
   )

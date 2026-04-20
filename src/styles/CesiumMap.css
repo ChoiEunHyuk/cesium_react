@@ -742,3 +742,267 @@
   flex-direction: column;
   gap: 6px;
 }
+
+/* ========================================================================
+ * 건물 탄소 배출 팝업 스타일
+ * ======================================================================== */
+.building-emission-popup {
+  width: 300px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+
+/* 탭 바 */
+.be-tab-bar {
+  display: flex;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.be-tab {
+  flex: 1;
+  padding: 10px 0;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+  margin-bottom: -1px;
+}
+
+.be-tab:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.be-tab.active {
+  color: #4CAF50;
+  border-bottom-color: #4CAF50;
+}
+
+/* 필드 */
+.be-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.be-field label {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.be-field select {
+  width: 100%;
+  padding: 9px 32px 9px 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  color: white;
+  font-size: 13px;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23fff' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  transition: border-color 0.2s;
+  color-scheme: dark;
+}
+
+.be-field select:focus {
+  outline: none;
+  border-color: #4CAF50;
+}
+
+.be-field select:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.be-field select option {
+  background: #2d3033;
+  color: white;
+}
+
+/* 액션 버튼 */
+.be-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.be-btn {
+  flex: 1;
+  padding: 10px 0;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.be-btn.primary {
+  background: #4CAF50;
+  color: white;
+}
+
+.be-btn.primary:hover {
+  background: #45a049;
+}
+
+.be-btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.be-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.be-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* 조회 결과 정보 */
+.be-result-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 6px;
+}
+
+.be-result-label {
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.be-result-value {
+  color: #ff7043;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* 범례 */
+.be-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.be-legend-title {
+  margin: 0 0 4px 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.be-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.be-legend-color {
+  width: 24px;
+  height: 16px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.be-legend-label {
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 12px;
+}
+
+/* ========================================================================
+ * 필지 클릭 상세 팝업
+ * ======================================================================== */
+.parcel-detail-popup {
+  position: absolute;
+  z-index: 1200;
+  width: 260px;
+  background: rgba(28, 30, 33, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  pointer-events: all;
+}
+
+.parcel-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  background: rgba(0, 0, 0, 0.25);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px 8px 0 0;
+}
+
+.parcel-detail-title {
+  color: white;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.parcel-detail-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+}
+
+.parcel-detail-body {
+  padding: 10px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.parcel-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.parcel-detail-row.highlight {
+  margin-top: 2px;
+}
+
+.parcel-detail-label {
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 11px;
+  white-space: nowrap;
+  padding-top: 1px;
+}
+
+.parcel-detail-value {
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: right;
+  word-break: break-all;
+}
+
+.parcel-detail-value.emission {
+  color: #ff7043;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.parcel-detail-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.1);
+  margin: 4px 0;
+}
